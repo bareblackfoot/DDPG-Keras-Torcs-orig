@@ -7,7 +7,7 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.optimizers import Adam
 import tensorflow as tf
-from keras.engine.training import collect_trainable_weights
+# from keras.engine.training import collect_trainable_weights
 import json
 
 from ReplayBuffer import ReplayBuffer
@@ -29,18 +29,25 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
     action_dim = 3  #Steering/Acceleration/Brake
     state_dim = 29  #of sensors input
 
-    np.random.seed(1337)
+    # np.random.seed(1337)
 
     vision = False
 
     EXPLORE = 100000.
-    episode_count = 2000
-    max_steps = 100000
+    if train_indicator:
+        episode_count = 500
+    else:
+        episode_count = 20
+    max_steps = 4000
     reward = 0
     done = False
     step = 0
-    epsilon = 1
+    if train_indicator:
+        epsilon = 1
+    else:
+        epsilon = 0
     indicator = 0
+    max_reward = -10000000
 
     #Tensorflow GPU optimization
     config = tf.ConfigProto()
@@ -58,14 +65,14 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
 
     #Now load the weight
     print("Now we load the weight")
-    try:
-        actor.model.load_weights("actormodel.h5")
-        critic.model.load_weights("criticmodel.h5")
-        actor.target_model.load_weights("actormodel.h5")
-        critic.target_model.load_weights("criticmodel.h5")
-        print("Weight load successfully")
-    except:
-        print("Cannot find the weight")
+    # try:
+    #     actor.model.load_weights("actormodel.h5")
+    #     critic.model.load_weights("criticmodel.h5")
+    #     actor.target_model.load_weights("actormodel.h5")
+    #     critic.target_model.load_weights("criticmodel.h5")
+    #     print("Weight load successfully")
+    # except:
+    #     print("Cannot find the weight")
 
     print("TORCS Experiment Start.")
     for i in range(episode_count):
@@ -81,8 +88,10 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
      
         total_reward = 0.
         for j in range(max_steps):
-            loss = 0 
-            epsilon -= 1.0 / EXPLORE
+            loss = 0
+            if train_indicator:
+                epsilon -= 1.0 / EXPLORE
+                epsilon = max(epsilon,0.10)
             a_t = np.zeros([1,action_dim])
             noise_t = np.zeros([1,action_dim])
             
@@ -133,15 +142,20 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
 
             total_reward += r_t
             s_t = s_t1
-        
-            print("Episode", i, "Step", step, "Action", a_t, "Reward", r_t, "Loss", loss)
+
+            if np.mod(step, 100) == 0:
+                print("Episode", i, "Step", step,"Epsilon", epsilon, "Action", a_t, "Reward", r_t, "Loss", loss)
         
             step += 1
+            if i == 0:
+                break
             if done:
                 break
 
-        if np.mod(i, 3) == 0:
-            if (train_indicator):
+        # if np.mod(i, 3) == 0:
+        if (train_indicator):
+            if total_reward > max_reward:
+                max_reward = total_reward
                 print("Now we save model")
                 actor.model.save_weights("actormodel.h5", overwrite=True)
                 with open("actormodel.json", "w") as outfile:
